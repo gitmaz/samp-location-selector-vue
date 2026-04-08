@@ -1,5 +1,9 @@
 # Location selector (Vue + Vuex + Node)
 
+![Map screenshot](./map.png)
+
+![Saved locations screenshot](./addreses.png)
+
 Sample full-stack app: pick a point on an OpenStreetMap-based map (Sydney CBD by default), save the resolved address to SQLite, and browse past selections.
 
 - **Frontend:** Vue 3, Vuex 4, Vue Router, Vite, Leaflet  
