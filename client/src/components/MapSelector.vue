@@ -1,17 +1,37 @@
 <template>
-  <div ref="wrap" class="map-wrap"></div>
+  <div class="map-wrap">
+    <LMap
+      :zoom="initialZoom"
+      :center="[initialLat, initialLng]"
+      :use-global-leaflet="false"
+      @click="onMapClick"
+    >
+      <LTileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        :max-zoom="19"
+      />
+
+      <LMarker
+        v-for="row in savedLocations"
+        :key="row.id"
+        :lat-lng="[row.latitude, row.longitude]"
+        :icon="savedIcon"
+      >
+        <LPopup>
+          {{ row.address }}
+        </LPopup>
+      </LMarker>
+
+      <LMarker v-if="pendingLatLng" :lat-lng="pendingLatLng" :icon="pendingIcon" />
+    </LMap>
+  </div>
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, onUpdated, ref } from 'vue';
+import { computed, ref } from 'vue';
+import { LMap, LMarker, LPopup, LTileLayer } from '@vue-leaflet/vue-leaflet';
 import L from 'leaflet';
-import iconUrl from 'leaflet/dist/images/marker-icon.png';
-import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
-import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
-
-// Leaflet + bundlers: fix default marker asset URLs
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({ iconUrl, iconRetinaUrl, shadowUrl });
 
 const props = defineProps({
   initialLat: { type: Number, required: true },
@@ -21,11 +41,6 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:coords']);
-
-const wrap = ref(null);
-let map;
-let pendingMarker;
-let savedLayer;
 
 const savedIcon = L.divIcon({
   className: 'marker marker--saved',
@@ -39,62 +54,23 @@ const pendingIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
-function placePendingMarker(latlng) {
-  if (!map) return;
-  if (pendingMarker) pendingMarker.setLatLng(latlng);
-  else {
-    pendingMarker = L.marker(latlng, { icon: pendingIcon }).addTo(map);
-  }
-  emit('update:coords', { lat: latlng.lat, lng: latlng.lng });
+const pendingLatLng = ref(null);
+
+const savedLocations = computed(() =>
+  (props.savedLocations || []).filter(
+    (row) =>
+      row &&
+      typeof row.id !== 'undefined' &&
+      typeof row.latitude === 'number' &&
+      typeof row.longitude === 'number'
+  )
+);
+
+function onMapClick(e) {
+  const { lat, lng } = e.latlng;
+  pendingLatLng.value = [lat, lng];
+  emit('update:coords', { lat, lng });
 }
-
-function renderSavedMarkers() {
-  if (!map) return;
-  if (savedLayer) {
-    savedLayer.clearLayers();
-  } else {
-    savedLayer = L.layerGroup().addTo(map);
-  }
-
-  for (const row of props.savedLocations || []) {
-    if (!row || typeof row.latitude !== 'number' || typeof row.longitude !== 'number') continue;
-    L.marker([row.latitude, row.longitude], { icon: savedIcon })
-      .bindPopup(row.address || `${row.latitude}, ${row.longitude}`)
-      .addTo(savedLayer);
-  }
-}
-
-onMounted(() => {
-  map = L.map(wrap.value, {
-    zoomControl: true,
-  }).setView([props.initialLat, props.initialLng], props.initialZoom);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  }).addTo(map);
-
-  map.on('click', (e) => {
-    placePendingMarker(e.latlng);
-  });
-
-  renderSavedMarkers();
-});
-
-onUpdated(() => {
-  // Re-render saved markers whenever parent updates `savedLocations`.
-  renderSavedMarkers();
-});
-
-onBeforeUnmount(() => {
-  if (map) {
-    map.remove();
-    map = null;
-    pendingMarker = null;
-    savedLayer = null;
-  }
-});
 </script>
 
 <style scoped>
@@ -105,6 +81,11 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border: 1px solid #cbd5e1;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.map-wrap :deep(.leaflet-container) {
+  height: 100%;
+  width: 100%;
 }
 </style>
 
